@@ -8,10 +8,17 @@ import pickle
 import time
 import re
 
-# Set the download directory to the script's directory
-download_dir = os.path.dirname(os.path.abspath(__file__))
-cookies_file = os.path.join(download_dir, "cookies.pkl")
-headers_file = os.path.join(download_dir, "headers.pkl")
+# Set the download directory to the script's directory and ensure the documents directory exists
+script_dir = os.path.dirname(os.path.abspath(__file__))
+documents_dir = os.path.join(script_dir, "documents")
+
+if not os.path.exists(documents_dir):
+    os.makedirs(documents_dir)
+    print(f"Created 'documents' directory at {documents_dir}")
+
+cookies_file = os.path.join(script_dir, "cookies.pkl")
+headers_file = os.path.join(script_dir, "headers.pkl")
+links_file = os.path.join(script_dir, "links.txt")
 
 def save_cookies_and_headers(driver, cookies_file, headers_file):
     print("Saving cookies and headers...")
@@ -43,12 +50,12 @@ def load_cookies_and_headers(session, cookies_file, headers_file):
         print("Headers file not found.")
     return headers
 
-def download_pdf_with_cookies(url, download_dir, session, headers, prf_number):
+def download_pdf_with_cookies(url, documents_dir, session, headers, prf_number):
     print(f"Attempting to download PDF with cookies for PRF number {prf_number}...")
     response = session.get(url, headers=headers)
     print(f"Response status code: {response.status_code}")
     if response.headers.get('Content-Type') == 'application/pdf':
-        pdf_path = os.path.join(download_dir, f'lv{prf_number}.pdf')
+        pdf_path = os.path.join(documents_dir, f'lv{prf_number}.pdf')
         with open(pdf_path, 'wb') as f:
             f.write(response.content)
         print(f"File downloaded successfully: {pdf_path}")
@@ -56,25 +63,27 @@ def download_pdf_with_cookies(url, download_dir, session, headers, prf_number):
     print(f"Response for PRF number {prf_number} is not a PDF, likely a CAPTCHA page.")
     return False
 
-# Initialize session
-print("Initializing session...")
-session = requests.Session()
-headers = load_cookies_and_headers(session, cookies_file, headers_file)
-
-urls = [
-    "https://kataster.skgeodesy.sk/Portal45/api/Bo/GeneratePrfPublic/?cadastralUnitCode=877891&prfNumber=5541&outputType=pdf",
-    "https://kataster.skgeodesy.sk/Portal45/api/Bo/GeneratePrfPublic/?cadastralUnitCode=877891&prfNumber=7373&outputType=pdf",
-    "https://kataster.skgeodesy.sk/Portal45/api/Bo/GeneratePrfPublic/?cadastralUnitCode=877891&prfNumber=12388&outputType=pdf",
-    "https://kataster.skgeodesy.sk/Portal45/api/Bo/GeneratePrfPublic/?cadastralUnitCode=877891&prfNumber=11664&outputType=pdf",
-    "https://kataster.skgeodesy.sk/Portal45/api/Bo/GeneratePrfPublic/?cadastralUnitCode=877891&prfNumber=5395&outputType=pdf",
-    # Add more URLs as needed
-]
-
 def extract_prf_number(url):
     match = re.search(r'prfNumber=(\d+)', url)
     if match:
         return match.group(1)
     return None
+
+def read_urls_from_file(file_path):
+    print(f"Reading URLs from file: {file_path}")
+    urls = []
+    with open(file_path, 'r') as file:
+        urls = [line.strip() for line in file if line.strip()]
+    print(f"Found {len(urls)} URL(s) to process.")
+    return urls
+
+# Initialize session
+print("Initializing session...")
+session = requests.Session()
+headers = load_cookies_and_headers(session, cookies_file, headers_file)
+
+# Read URLs from links.txt file
+urls = read_urls_from_file(links_file)
 
 # Loop through the list of URLs and attempt to download each document
 for url in urls:
@@ -83,12 +92,12 @@ for url in urls:
         print(f"Could not extract PRF number from URL: {url}")
         continue
 
-    if not download_pdf_with_cookies(url, download_dir, session, headers, prf_number):
+    if not download_pdf_with_cookies(url, documents_dir, session, headers, prf_number):
         # Initialize WebDriver with options to set the download directory
         print("Setting up WebDriver...")
         options = webdriver.ChromeOptions()
         prefs = {
-            "download.default_directory": download_dir,
+            "download.default_directory": documents_dir,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "plugins.always_open_pdf_externally": True
@@ -116,7 +125,7 @@ for url in urls:
         # Check if the file was downloaded
         print("Checking if the file was downloaded...")
         file_downloaded = False
-        for file_name in os.listdir(download_dir):
+        for file_name in os.listdir(documents_dir):
             if file_name.endswith('.pdf'):
                 file_downloaded = True
                 print(f"File downloaded successfully: {file_name}")

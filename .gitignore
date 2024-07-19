@@ -1,3 +1,5 @@
 .DS_store
 *.pkl
 *.pdf
+links.txt
+documents/*
